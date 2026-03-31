@@ -2,21 +2,17 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:path_provider/path_provider.dart';
-
-import 'result_screen.dart';
 import 'api_service.dart';
+import 'result_screen.dart';
 
 class CaptureScreen extends StatefulWidget {
-  const CaptureScreen({super.key});
-
   @override
   State<CaptureScreen> createState() => _CaptureScreenState();
 }
 
 class _CaptureScreenState extends State<CaptureScreen> {
   CameraController? controller;
-  bool loading = true;
-  XFile? captured;
+  bool initialized = false;
 
   @override
   void initState() {
@@ -25,49 +21,59 @@ class _CaptureScreenState extends State<CaptureScreen> {
   }
 
   Future<void> initCamera() async {
-    final cameras = await availableCameras();
-    controller = CameraController(cameras[0], ResolutionPreset.max);
+    final cams = await availableCameras();
+    controller = CameraController(cams[0], ResolutionPreset.max);
     await controller!.initialize();
-    setState(() => loading = false);
+    setState(() => initialized = true);
   }
 
-  Future<void> captureImage() async {
-    if (controller == null || !controller!.value.isInitialized) return;
+  Future<void> captureAndAnalyze() async {
+    if (!controller!.value.isInitialized) return;
 
-    final file = await controller!.takePicture();
+    final dir = await getTemporaryDirectory();
+    final path = "${dir.path}/capture.jpg";
 
-    setState(() => captured = file);
+    await controller!.takePicture().then((XFile file) {
+      File(file.path).copySync(path);
+    });
 
-    // send to server
-    final analyzedPath = await ApiService.sendToServer(File(file.path));
+    File captured = File(path);
 
-    if (!mounted) return;
+    var result = await ApiService().analyzePCB(captured);
+
+    if (result == null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Server error")));
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ResultScreen(analyzedPath: analyzedPath),
+        builder: (_) => ResultScreen(
+          processedBase64: result["processed_image"],
+          defectCount: result["defect_count"],
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+    if (!initialized) {
+      return Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Capture PCB")),
+      appBar: AppBar(title: Text("Capture PCB")),
       body: Column(
         children: [
           Expanded(child: CameraPreview(controller!)),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: captureImage,
-              child: const Text("Capture & Analyze"),
+              onPressed: captureAndAnalyze,
+              child: Text("Capture & Analyze"),
             ),
           )
         ],
