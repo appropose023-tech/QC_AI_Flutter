@@ -1,6 +1,6 @@
 workflows:
   build_app:
-    name: Build Flutter APK from partial repo
+    name: Build Flutter APK
     max_build_duration: 60
     environment:
       flutter: stable
@@ -8,23 +8,21 @@ workflows:
         APP_NAME: pcb_inspector
 
     scripts:
-      # 1. Create fresh Flutter project
       - name: Create flutter structure
         script: |
           flutter create $APP_NAME
           rm -rf $APP_NAME/lib/*
           cp -R lib/* $APP_NAME/lib/
 
-      # 2. Overwrite pubspec.yaml with needed dependencies
       - name: Inject pubspec.yaml
         script: |
           cat > $APP_NAME/pubspec.yaml << "EOF"
           name: pcb_inspector
-          description: PCB inspector camera app
+          description: PCB inspector test image capture app
           publish_to: "none"
 
           environment:
-            sdk: ">=3.1.0 <4.0.0"
+            sdk: ">=3.0.0 <4.0.0"
 
           dependencies:
             flutter:
@@ -32,7 +30,7 @@ workflows:
             camera: ^0.11.0
             http: ^1.1.0
             path_provider: ^2.1.2
-            gallery_saver: ^2.3.2
+            image_gallery_saver: ^2.0.3
 
           dev_dependencies:
             flutter_test:
@@ -42,19 +40,16 @@ workflows:
             uses-material-design: true
           EOF
 
-      # 3. Ensure Android minSdkVersion >= 21
-      - name: Patch Android Gradle settings
+      - name: Patch Android minSdkVersion
         script: |
           cd $APP_NAME/android
           sed -i '' 's/minSdkVersion.*/minSdkVersion 21/' app/build.gradle || true
 
-      # 4. Get flutter packages
       - name: pub get
         script: |
           cd $APP_NAME
           flutter pub get
 
-      # 5. Build release APK
       - name: Build APK
         script: |
           cd $APP_NAME
@@ -65,6 +60,6 @@ workflows:
 
     publishing:
       scripts:
-        - name: APK Location
+        - name: Print APK path
           script: |
-            echo "APK path: $APP_NAME/build/app/outputs/flutter-apk/app-release.apk"
+            echo "APK ready at: $APP_NAME/build/app/outputs/flutter-apk/app-release.apk"
