@@ -53,7 +53,4 @@ workflows:
     artifacts:
       - $APP_NAME/build/app/outputs/flutter-apk/app-release.apk
 
-    publishing:
-      email:
-        recipients:
-          - "YOUR_EMAIL_HERE"
+  
