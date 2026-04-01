@@ -1,26 +1,26 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 
+const String BACKEND_URL = "http://104.154.76.47:8000/compare_live";
+
 class ApiService {
-  static const String apiUrl = "http://104.154.76.47:8000/inspect/";
-
-  Future<Map<String, dynamic>?> analyzePCB(File image) async {
+  Future<File?> uploadImage(File imgFile) async {
     try {
-      var request = http.MultipartRequest("POST", Uri.parse(apiUrl));
-      request.files.add(await http.MultipartFile.fromPath("file", image.path));
+      final uri = Uri.parse(BACKEND_URL);
+      var request = http.MultipartRequest("POST", uri);
+      request.files.add(await http.MultipartFile.fromPath("file", imgFile.path));
 
-      var streamed = await request.send();
-      var response = await http.Response.fromStream(streamed);
+      var response = await request.send();
 
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      } else {
-        print("Server Error: ${response.statusCode}");
-        return null;
+        final bytes = await response.stream.toBytes();
+
+        final temp = File("${imgFile.parent.path}/processed.png");
+        return temp.writeAsBytes(bytes);
       }
+      return null;
     } catch (e) {
-      print("API Error: $e");
+      print("Upload error: $e");
       return null;
     }
   }
