@@ -1,51 +1,48 @@
 workflows:
-  build-flutter-apk:
+  build_apk:
     name: Build PCB Inspector APK
     max_build_duration: 60
     environment:
       flutter: stable
-      vars:
-        APP_NAME: "pcb_inspector_project"
 
     scripts:
-      # 1) Backup your repo's lib directory
-      - name: Backup source lib folder
+      - name: Backup repo's lib folder
         script: |
+          echo "Backing up lib/"
           mkdir lib_backup
           cp -R lib/* lib_backup/
 
-      # 2) Create fresh Flutter project
-      - name: Create fresh Flutter project
+      - name: Backup repo's android_overrides folder
         script: |
-          flutter create $APP_NAME
+          echo "Backing up android_overrides/"
+          mkdir android_overrides_backup
+          cp -R android_overrides/* android_overrides_backup/
 
-      # 3) Replace Flutter lib folder with your backup
-      - name: Inject your lib folder
+      - name: Create full Flutter project structure
         script: |
-          cd $APP_NAME
-          rm -rf lib
-          mkdir lib
-          cp -R ../lib_backup/* lib/
+          echo "Creating Flutter project..."
+          flutter create --platforms=android .
 
-      # 4) Add dependencies
-      - name: Add dependencies
+      - name: Restore your lib into Flutter project
         script: |
-          cd $APP_NAME
-          flutter pub add camera
-          flutter pub add http
-          flutter pub add permission_handler
+          echo "Restoring lib/"
+          rm -rf lib/*
+          cp -R lib_backup/* lib/
 
-      # 5) Get packages
-      - name: Flutter pub get
+      - name: Inject Android overrides
         script: |
-          cd $APP_NAME
+          echo "Injecting AndroidManifest + network_security_config"
+          mkdir -p android/app/src/main/res/xml
+          cp android_overrides_backup/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          cp android_overrides_backup/network_security_config.xml android/app/src/main/res/xml/network_security_config.xml
+
+      - name: Get Flutter dependencies
+        script: |
           flutter pub get
 
-      # 6) Build APK
-      - name: Build APK
+      - name: Build Release APK
         script: |
-          cd $APP_NAME
           flutter build apk --release
 
     artifacts:
-      - $APP_NAME/build/app/outputs/flutter-apk/app-release.apk
+      - build/app/outputs/flutter-apk/app-release.apk
