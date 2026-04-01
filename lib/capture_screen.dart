@@ -6,6 +6,8 @@ import 'api_service.dart';
 import 'result_screen.dart';
 
 class CaptureScreen extends StatefulWidget {
+  const CaptureScreen({super.key});
+
   @override
   State<CaptureScreen> createState() => _CaptureScreenState();
 }
@@ -17,42 +19,36 @@ class _CaptureScreenState extends State<CaptureScreen> {
   @override
   void initState() {
     super.initState();
-    initCamera();
+    initCam();
   }
 
-  Future<void> initCamera() async {
-    final cams = await availableCameras();
-    controller = CameraController(cams[0], ResolutionPreset.max);
+  Future<void> initCam() async {
+    final cameras = await availableCameras();
+    controller = CameraController(cameras.first, ResolutionPreset.max);
+
     await controller!.initialize();
     setState(() => initialized = true);
   }
 
-  Future<void> captureAndAnalyze() async {
+  Future<void> captureImage() async {
     if (!controller!.value.isInitialized) return;
 
-    final dir = await getTemporaryDirectory();
-    final path = "${dir.path}/capture.jpg";
+    final XFile img = await controller!.takePicture();
 
-    await controller!.takePicture().then((XFile file) {
-      File(file.path).copySync(path);
-    });
+    final Directory temp = await getTemporaryDirectory();
+    final File file = File("${temp.path}/pcb_input.jpg");
+    File(img.path).copySync(file.path);
 
-    File captured = File(path);
+    final processed = await ApiService().uploadImage(file);
 
-    var result = await ApiService().analyzePCB(captured);
-
-    if (result == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Server error")));
-      return;
-    }
+    if (!mounted) return;
 
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ResultScreen(
-          processedBase64: result["processed_image"],
-          defectCount: result["defect_count"],
+          original: file,
+          processed: processed,
         ),
       ),
     );
@@ -61,19 +57,24 @@ class _CaptureScreenState extends State<CaptureScreen> {
   @override
   Widget build(BuildContext context) {
     if (!initialized) {
-      return Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text("Capture PCB")),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(child: CameraPreview(controller!)),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: captureAndAnalyze,
-              child: Text("Capture & Analyze"),
+          CameraPreview(controller!),
+          Positioned(
+            bottom: 40,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: ElevatedButton(
+                onPressed: captureImage,
+                child: const Text("Capture PCB"),
+              ),
             ),
           )
         ],
