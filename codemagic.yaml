@@ -1,56 +1,80 @@
 workflows:
   build_app:
-    name: PCB App Builder
-    max_build_duration: 60
+    name: Universal Flutter Project Builder
     instance_type: mac_mini_m1
+    max_build_duration: 60
+
+    environment:
+      flutter: stable
+
     scripts:
-      - name: Hard Reset and Scaffold
-        script: | 
-          # 1. Move your repo files to a safe zone (the /tmp folder)
-          echo "Moving repository files to temp storage..."
-          mkdir -p /tmp/repo_files
-          
-          # Move everything from current dir to temp, then clear current dir
-          cp -R . /tmp/repo_files/
-          find . -maxdepth 1 -not -path '*/.*' -delete 
 
-          # 2. Force generate a brand new Flutter project structure
-          # This MUST create the 'android' directory
-          flutter create --force --project-name pcb_app .
-          
-          # 3. Verify the directory exists before proceeding
-          if [ ! -d "android" ]; then
-            echo "❌ ERROR: Flutter failed to create the android directory."
-            exit 1
-          fi
-
-      - name: Inject Repository Code
+      # ----------------------------------------------------
+      # 1. Create Full Flutter Project Scaffold
+      # ----------------------------------------------------
+      - name: Scaffold Flutter Multiplatform Project
         script: |
-          echo "Restoring lib and overrides..."
-          
-          # Remove the boilerplate lib and restore yours
+          echo ">>> Backing up repository..."
+          mkdir -p /tmp/repo_files
+          rsync -av ./ /tmp/repo_files \
+            --exclude ".git" \
+            --exclude ".dart_tool" \
+            --exclude "build" \
+            --exclude ".gradle"
+
+          echo ">>> Cleaning workspace..."
+          find . -mindepth 1 -maxdepth 1 -not -name "." -exec rm -rf {} \;
+
+          echo ">>> Creating new Flutter project with all platforms..."
+          flutter create --platforms=android,ios,web,linux,macos,windows --project-name pcb_app .
+
+      # ----------------------------------------------------
+      # 2. Inject repository content
+      # ----------------------------------------------------
+      - name: Restore Project Source Code
+        script: |
+          echo ">>> Restoring lib folder..."
           rm -rf lib
           cp -R /tmp/repo_files/lib ./lib
-          
-          # Restore pubspec.yaml (crucial for dependencies)
-          cp /tmp/repo_files/pubspec.yaml ./pubspec.yaml
 
-          # 4. Apply Android overrides
-          # We use -a to preserve structure and ensure it treats 'android' as the destination
-          if [ -d "/tmp/repo_files/android_overrides" ]; then
-            echo "Applying Android overrides..."
-            cp -Rv /tmp/repo_files/android_overrides/* ./android/
+          echo ">>> Restoring pubspec.yaml if exists..."
+          if [ -f "/tmp/repo_files/pubspec.yaml" ]; then
+            cp /tmp/repo_files/pubspec.yaml ./pubspec.yaml
           else
-            echo "No android_overrides folder found in git."
+            echo "No pubspec.yaml found — keeping auto-generated one."
           fi
 
-      - name: Install Dependencies
+      # ----------------------------------------------------
+      # 3. Apply Android Overrides
+      # ----------------------------------------------------
+      - name: Apply Android Overrides
         script: |
-          flutter pub get
+          if [ -d "/tmp/repo_files/android_overrides" ]; then
+            echo ">>> Applying Android override files..."
+            rsync -av /tmp/repo_files/android_overrides/ ./android/app/
+          else
+            echo "No android_overrides directory found!"
+          fi
 
-      - name: Build Android Release
-        script: |
-          flutter build apk --release
-          
+          echo ">>> Ensure network_security_config path..."
+          mkdir -p android/app/src/main/res/xml
+
+          if [ -f "/tmp/repo_files/android_overrides/app/src/main/res/xml/network_security_config.xml" ]; then
+            cp /tmp/repo_files/android_overrides/app/src/main/res/xml/network_security_config.xml \
+               android/app/src/main/res/xml/network_security_config.xml
+          fi
+
+      # ----------------------------------------------------
+      # 4. Install Dependencies
+      # ----------------------------------------------------
+      - name: Flutter pub get
+        script: flutter pub get
+
+      # ----------------------------------------------------
+      # 5. Build Android APK
+      # ----------------------------------------------------
+      - name: Build Android APK
+        script: flutter build apk --release
+
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
