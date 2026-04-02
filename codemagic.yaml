@@ -4,37 +4,44 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m1
     scripts:
-      - name: Prepare and Scaffolding
+      - name: Hard Reset and Scaffold
         script: | 
-          # 1. Safely move your repository code to a temporary location
-          echo "Backing up repository source..."
-          mkdir -p /tmp/source_backup
-          mv lib /tmp/source_backup/
+          # 1. Move your repo files to a safe zone (the /tmp folder)
+          echo "Moving repository files to temp storage..."
+          mkdir -p /tmp/repo_files
           
-          # Move android_overrides if it exists
-          if [ -d "android_overrides" ]; then
-            mv android_overrides /tmp/source_backup/
+          # Move everything from current dir to temp, then clear current dir
+          cp -R . /tmp/repo_files/
+          find . -maxdepth 1 -not -path '*/.*' -delete 
+
+          # 2. Force generate a brand new Flutter project structure
+          # This MUST create the 'android' directory
+          flutter create --force --project-name pcb_app .
+          
+          # 3. Verify the directory exists before proceeding
+          if [ ! -d "android" ]; then
+            echo "❌ ERROR: Flutter failed to create the android directory."
+            exit 1
           fi
 
-          # 2. Generate all platform folders (android, ios, webos, etc.)
-          # This creates the standard structure Codemagic needs
-          flutter create --force --project-name pcb_app .
-
-          # 3. Wipe the default 'lib' and restore your actual code
-          rm -rf lib
-          mv /tmp/source_backup/lib ./lib
-          
-          echo "✓ Scaffolding complete and lib restored."
-
-      - name: Apply Android Overrides
+      - name: Inject Repository Code
         script: |
-          # 4. Restore and apply Android overrides
-          if [ -d "/tmp/source_backup/android_overrides" ]; then
+          echo "Restoring lib and overrides..."
+          
+          # Remove the boilerplate lib and restore yours
+          rm -rf lib
+          cp -R /tmp/repo_files/lib ./lib
+          
+          # Restore pubspec.yaml (crucial for dependencies)
+          cp /tmp/repo_files/pubspec.yaml ./pubspec.yaml
+
+          # 4. Apply Android overrides
+          # We use -a to preserve structure and ensure it treats 'android' as the destination
+          if [ -d "/tmp/repo_files/android_overrides" ]; then
             echo "Applying Android overrides..."
-            # This copies your custom gradle/manifest files into the 'android' folder
-            cp -R /tmp/source_backup/android_overrides/* android/
+            cp -Rv /tmp/repo_files/android_overrides/* ./android/
           else
-            echo "No android_overrides found, skipping..."
+            echo "No android_overrides folder found in git."
           fi
 
       - name: Install Dependencies
