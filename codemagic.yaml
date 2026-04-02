@@ -8,7 +8,7 @@ workflows:
       flutter: stable
 
     scripts:
-      # 1. Backup Repo
+      # 1. Scaffold a clean Flutter project
       - name: Scaffold Flutter Multiplatform Project
         script: |
           echo ">>> Backing up your repo files..."
@@ -24,43 +24,40 @@ workflows:
           echo ">>> Creating full Flutter project..."
           flutter create --project-name pcb_app --platforms=android,ios,web,linux,macos,windows .
 
-      # 2. Restore Lib AND Pubspec (Crucial)
+      # 2. Restore your real code
       - name: Restore Source Files
         script: |
           echo ">>> Restoring lib and pubspec..."
           rm -rf lib
           cp -R /tmp/repo_files/lib ./lib
-          # If you have a custom pubspec, restore it now:
           cp /tmp/repo_files/pubspec.yaml ./pubspec.yaml || echo "Using generated pubspec"
 
-      # 3. Apply ANDROID Overrides
-- name: Apply Android Overrides
-  script: |
-    echo ">>> Applying Android override files..."
+      # 3. Apply safe Android overrides (no v1 embedding)
+      - name: Apply Android Overrides
+        script: |
+          echo ">>> Applying Android override files..."
 
-    # Only copy RESOURCES, not manifests or kotlin folder
-    if [ -d "/tmp/repo_files/android_overrides/app/src/main/res" ]; then
-      echo ">>> Copying only RES folder..."
-      rsync -av /tmp/repo_files/android_overrides/app/src/main/res/ ./android/app/src/main/res/
-    fi
+          # Only copy RESOURCES, not manifest or kotlin files
+          if [ -d "/tmp/repo_files/android_overrides/app/src/main/res" ]; then
+            echo ">>> Copying only RES folder..."
+            rsync -av /tmp/repo_files/android_overrides/app/src/main/res/ ./android/app/src/main/res/
+          fi
 
-    # Copy network_security_config only
-    mkdir -p android/app/src/main/res/xml
-    if [ -f "/tmp/repo_files/android_overrides/app/src/main/res/xml/network_security_config.xml" ]; then
-      cp /tmp/repo_files/android_overrides/app/src/main/res/xml/network_security_config.xml \
-         android/app/src/main/res/xml/network_security_config.xml
-    fi
+          # Copy network_security_config only
+          mkdir -p android/app/src/main/res/xml
+          if [ -f "/tmp/repo_files/android_overrides/app/src/main/res/xml/network_security_config.xml" ]; then
+            cp /tmp/repo_files/android_overrides/app/src/main/res/xml/network_security_config.xml \
+               android/app/src/main/res/xml/network_security_config.xml
+          fi
 
-      # 4. Dependencies
-      - name: Add Required Packages
+     # 4. Dependencies
+    - name: Add Required Packages
         script: |
           echo ">>> Syncing dependencies..."
-          # If you restored your pubspec.yaml, 'pub get' is enough. 
-          # If not, 'pub add' ensures they exist.
-          flutter pub add http camera || true 
+          flutter pub add http camera || true
           flutter pub get
 
-      # 5. Build
+      # 5. Build APK
       - name: Build Android APK
         script: |
           flutter build apk --release
